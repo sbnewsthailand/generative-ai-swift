@@ -30,11 +30,7 @@ public class Chat {
   /// model. This will be provided to the model for each message sent as context for the discussion.
   public var history: [ModelContent]
 
-  /// Sends a message using the existing history of this chat as context. If successful, the message
-  /// and response will be added to the history. If unsuccessful, history will remain unchanged.
-  /// - Parameter parts: The new content to send as a single chat message.
-  /// - Returns: The model's response if no error occurred.
-  /// - Throws: A ``GenerateContentError`` if an error occurred.
+  /// See ``sendMessage(_:)-3ify5``.
   public func sendMessage(_ parts: any ThrowingPartsRepresentable...) async throws
     -> GenerateContentResponse {
     return try await sendMessage([ModelContent(parts: parts)])
@@ -74,38 +70,13 @@ public class Chat {
     // Make sure we inject the role into the content received.
     let toAdd = ModelContent(role: "model", parts: reply.parts)
 
-    var functionResponses = [FunctionResponse]()
-    for part in reply.parts {
-      if case let .functionCall(functionCall) = part {
-        try functionResponses.append(await model.executeFunction(functionCall: functionCall))
-      }
-    }
-
-    // Call the functions requested by the model, if any.
-    let functionResponseContent = try ModelContent(
-      role: "function",
-      functionResponses.map { functionResponse in
-        ModelContent.Part.functionResponse(functionResponse)
-      }
-    )
-
     // Append the request and successful result to history, then return the value.
     history.append(contentsOf: newContent)
     history.append(toAdd)
-
-    // If no function calls requested, return the results.
-    if functionResponses.isEmpty {
-      return result
-    }
-
-    // Re-send the message with the function responses.
-    return try await sendMessage([functionResponseContent])
+    return result
   }
 
-  /// Sends a message using the existing history of this chat as context. If successful, the message
-  /// and response will be added to the history. If unsuccessful, history will remain unchanged.
-  /// - Parameter parts: The new content to send as a single chat message.
-  /// - Returns: A stream containing the model's response or an error if an error occurred.
+  /// See ``sendMessageStream(_:)-4abs3``.
   @available(macOS 12.0, *)
   public func sendMessageStream(_ parts: any ThrowingPartsRepresentable...)
     -> AsyncThrowingStream<GenerateContentResponse, Error> {
@@ -182,7 +153,7 @@ public class Chat {
         case let .text(str):
           combinedText += str
 
-        case .data, .fileData, .functionCall, .functionResponse:
+        case .data(mimetype: _, _):
           // Don't combine it, just add to the content. If there's any text pending, add that as
           // a part.
           if !combinedText.isEmpty {
@@ -194,10 +165,6 @@ public class Chat {
 
         case .functionCall:
           // TODO(andrewheard): Add function call to the chat history when encoding is implemented.
-          fatalError("Function calling not yet implemented in chat.")
-
-        case .functionResponse:
-          // TODO(andrewheard): Add function response to chat history when encoding is implemented.
           fatalError("Function calling not yet implemented in chat.")
         }
       }

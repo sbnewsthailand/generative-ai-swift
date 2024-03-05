@@ -63,7 +63,6 @@ final class GenerativeModelTests: XCTestCase {
     let promptFeedback = try XCTUnwrap(response.promptFeedback)
     XCTAssertNil(promptFeedback.blockReason)
     XCTAssertEqual(promptFeedback.safetyRatings, safetyRatingsNegligible)
-    XCTAssertEqual(response.functionCalls, [])
   }
 
   func testGenerateContent_success_basicReplyShort() async throws {
@@ -82,10 +81,11 @@ final class GenerativeModelTests: XCTestCase {
     XCTAssertEqual(candidate.safetyRatings, safetyRatingsNegligible)
     XCTAssertEqual(candidate.content.parts.count, 1)
     let part = try XCTUnwrap(candidate.content.parts.first)
-    XCTAssertEqual(part.text, "Mountain View, California")
+    XCTAssertEqual(part.text, "Mountain View, California, United States")
     XCTAssertEqual(response.text, part.text)
-    XCTAssertNil(response.promptFeedback)
-    XCTAssertEqual(response.functionCalls, [])
+    let promptFeedback = try XCTUnwrap(response.promptFeedback)
+    XCTAssertNil(promptFeedback.blockReason)
+    XCTAssertEqual(promptFeedback.safetyRatings, safetyRatingsNegligible)
   }
 
   func testGenerateContent_success_citations() async throws {
@@ -102,27 +102,12 @@ final class GenerativeModelTests: XCTestCase {
     XCTAssertEqual(candidate.content.parts.count, 1)
     XCTAssertEqual(response.text, "Some information cited from an external source")
     let citationMetadata = try XCTUnwrap(candidate.citationMetadata)
-    XCTAssertEqual(citationMetadata.citationSources.count, 4)
-    let citationSource1 = try XCTUnwrap(citationMetadata.citationSources[0])
-    XCTAssertEqual(citationSource1.uri, "https://www.example.com/some-citation-1")
-    XCTAssertEqual(citationSource1.startIndex, 0)
-    XCTAssertEqual(citationSource1.endIndex, 128)
-    XCTAssertNil(citationSource1.license)
-    let citationSource2 = try XCTUnwrap(citationMetadata.citationSources[1])
-    XCTAssertEqual(citationSource2.uri, "https://www.example.com/some-citation-2")
-    XCTAssertEqual(citationSource2.startIndex, 130)
-    XCTAssertEqual(citationSource2.endIndex, 265)
-    XCTAssertNil(citationSource2.license)
-    let citationSource3 = try XCTUnwrap(citationMetadata.citationSources[2])
-    XCTAssertEqual(citationSource3.uri, "https://www.example.com/some-citation-3")
-    XCTAssertEqual(citationSource3.startIndex, 272)
-    XCTAssertEqual(citationSource3.endIndex, 431)
-    XCTAssertNil(citationSource3.license)
-    let citationSource4 = try XCTUnwrap(citationMetadata.citationSources[3])
-    XCTAssertEqual(citationSource4.uri, "https://www.example.com/some-citation-4")
-    XCTAssertEqual(citationSource4.startIndex, 444)
-    XCTAssertEqual(citationSource4.endIndex, 630)
-    XCTAssertEqual(citationSource4.license, "mit")
+    XCTAssertEqual(citationMetadata.citationSources.count, 1)
+    let citationSource = try XCTUnwrap(citationMetadata.citationSources.first)
+    XCTAssertEqual(citationSource.uri, "https://www.example.com/some-citation")
+    XCTAssertEqual(citationSource.startIndex, 574)
+    XCTAssertEqual(citationSource.endIndex, 705)
+    XCTAssertEqual(citationSource.license, "")
   }
 
   func testGenerateContent_success_quoteReply() async throws {
@@ -203,7 +188,6 @@ final class GenerativeModelTests: XCTestCase {
     }
     XCTAssertEqual(functionCall.name, "current_time")
     XCTAssertTrue(functionCall.args.isEmpty)
-    XCTAssertEqual(response.functionCalls, [functionCall])
   }
 
   func testGenerateContent_success_functionCall_noArguments() async throws {
@@ -225,7 +209,6 @@ final class GenerativeModelTests: XCTestCase {
     }
     XCTAssertEqual(functionCall.name, "current_time")
     XCTAssertTrue(functionCall.args.isEmpty)
-    XCTAssertEqual(response.functionCalls, [functionCall])
   }
 
   func testGenerateContent_success_functionCall_withArguments() async throws {
@@ -251,57 +234,6 @@ final class GenerativeModelTests: XCTestCase {
     XCTAssertEqual(argX, .number(4))
     let argY = try XCTUnwrap(functionCall.args["y"])
     XCTAssertEqual(argY, .number(5))
-    XCTAssertEqual(response.functionCalls, [functionCall])
-  }
-
-  func testGenerateContent_success_functionCall_parallelCalls() async throws {
-    MockURLProtocol
-      .requestHandler = try httpRequestHandler(
-        forResource: "unary-success-function-call-parallel-calls",
-        withExtension: "json"
-      )
-
-    let response = try await model.generateContent(testPrompt)
-
-    XCTAssertEqual(response.candidates.count, 1)
-    let candidate = try XCTUnwrap(response.candidates.first)
-    XCTAssertEqual(candidate.content.parts.count, 3)
-    let functionCalls = response.functionCalls
-    XCTAssertEqual(functionCalls.count, 3)
-  }
-
-  func testGenerateContent_success_functionCall_mixedContent() async throws {
-    MockURLProtocol
-      .requestHandler = try httpRequestHandler(
-        forResource: "unary-success-function-call-mixed-content",
-        withExtension: "json"
-      )
-
-    let response = try await model.generateContent(testPrompt)
-
-    XCTAssertEqual(response.candidates.count, 1)
-    let candidate = try XCTUnwrap(response.candidates.first)
-    XCTAssertEqual(candidate.content.parts.count, 4)
-    let functionCalls = response.functionCalls
-    XCTAssertEqual(functionCalls.count, 2)
-    let text = try XCTUnwrap(response.text)
-    XCTAssertEqual(text, "The sum of [1, 2, 3] is")
-  }
-
-  func testGenerateContent_usageMetadata() async throws {
-    MockURLProtocol
-      .requestHandler = try httpRequestHandler(
-        forResource: "unary-success-basic-reply-short",
-        withExtension: "json"
-      )
-
-    let response = try await model.generateContent(testPrompt)
-
-    let usageMetadata = try XCTUnwrap(response.usageMetadata)
-    // TODO(andrewheard): Re-run prompt when `promptTokenCount` and `totalTokenCount` added.
-    XCTAssertEqual(usageMetadata.promptTokenCount, 0)
-    XCTAssertEqual(usageMetadata.candidatesTokenCount, 4)
-    XCTAssertEqual(usageMetadata.totalTokenCount, 0)
   }
 
   func testGenerateContent_failure_invalidAPIKey() async throws {
@@ -316,8 +248,8 @@ final class GenerativeModelTests: XCTestCase {
     do {
       _ = try await model.generateContent(testPrompt)
       XCTFail("Should throw GenerateContentError.internalError; no error thrown.")
-    } catch let GenerateContentError.invalidAPIKey(message) {
-      XCTAssertEqual(message, "API key not valid. Please pass a valid API key.")
+    } catch GenerateContentError.invalidAPIKey {
+      // Do nothing, catching a GenerateContentError.invalidAPIKey error is expected.
     } catch {
       XCTFail("Should throw GenerateContentError.invalidAPIKey; error thrown: \(error)")
     }
@@ -611,20 +543,6 @@ final class GenerativeModelTests: XCTestCase {
     XCTAssertEqual(response.candidates.count, 1)
   }
 
-  func testGenerateContent_requestOptions_defaultTimeout() async throws {
-    let expectedTimeout = 300.0 // Default in timeout in RequestOptions()
-    MockURLProtocol
-      .requestHandler = try httpRequestHandler(
-        forResource: "unary-success-basic-reply-short",
-        withExtension: "json",
-        timeout: expectedTimeout
-      )
-
-    let response = try await model.generateContent(testPrompt)
-
-    XCTAssertEqual(response.candidates.count, 1)
-  }
-
   // MARK: - Generate Content (Streaming)
 
   func testGenerateContentStream_failureInvalidAPIKey() async throws {
@@ -801,48 +719,9 @@ final class GenerativeModelTests: XCTestCase {
 
     XCTAssertEqual(citations.count, 8)
     XCTAssertTrue(citations
-      .contains(where: {
-        $0.startIndex == 0 && $0.endIndex == 128 && !$0.uri.isEmpty && $0.license == nil
-      }))
+      .contains(where: { $0.startIndex == 574 && $0.endIndex == 705 && !$0.uri.isEmpty }))
     XCTAssertTrue(citations
-      .contains(where: {
-        $0.startIndex == 130 && $0.endIndex == 265 && !$0.uri.isEmpty && $0.license == nil
-      }))
-    XCTAssertTrue(citations
-      .contains(where: {
-        $0.startIndex == 272 && $0.endIndex == 431 && !$0.uri.isEmpty && $0.license == nil
-      }))
-    XCTAssertTrue(citations
-      .contains(where: {
-        $0.startIndex == 444 && $0.endIndex == 630 && !$0.uri.isEmpty && $0.license == "mit"
-      }))
-  }
-
-  func testGenerateContentStream_usageMetadata() async throws {
-    MockURLProtocol
-      .requestHandler = try httpRequestHandler(
-        forResource: "streaming-success-basic-reply-short",
-        withExtension: "txt"
-      )
-    var responses = [GenerateContentResponse]()
-
-    let stream = model.generateContentStream(testPrompt)
-    for try await response in stream {
-      responses.append(response)
-    }
-
-    for (index, response) in responses.enumerated() {
-      if index == responses.endIndex - 1 {
-        let usageMetadata = try XCTUnwrap(response.usageMetadata)
-        // TODO(andrewheard): Re-run prompt when `promptTokenCount` and `totalTokenCount` added.
-        XCTAssertEqual(usageMetadata.promptTokenCount, 0)
-        XCTAssertEqual(usageMetadata.candidatesTokenCount, 4)
-        XCTAssertEqual(usageMetadata.totalTokenCount, 0)
-      } else {
-        // Only the last streamed response contains usage metadata
-        XCTAssertNil(response.usageMetadata)
-      }
-    }
+      .contains(where: { $0.startIndex == 899 && $0.endIndex == 1026 && !$0.uri.isEmpty }))
   }
 
   func testGenerateContentStream_errorMidStream() async throws {
@@ -981,25 +860,6 @@ final class GenerativeModelTests: XCTestCase {
     XCTAssertEqual(responses, 1)
   }
 
-  func testGenerateContentStream_requestOptions_defaultTimeout() async throws {
-    let expectedTimeout = 300.0 // Default in timeout in RequestOptions()
-    MockURLProtocol
-      .requestHandler = try httpRequestHandler(
-        forResource: "streaming-success-basic-reply-short",
-        withExtension: "txt",
-        timeout: expectedTimeout
-      )
-
-    var responses = 0
-    let stream = model.generateContentStream(testPrompt)
-    for try await content in stream {
-      XCTAssertNotNil(content.text)
-      responses += 1
-    }
-
-    XCTAssertEqual(responses, 1)
-  }
-
   // MARK: - Count Tokens
 
   func testCountTokens_succeeds() async throws {
@@ -1046,20 +906,6 @@ final class GenerativeModelTests: XCTestCase {
       requestOptions: requestOptions,
       urlSession: urlSession
     )
-
-    let response = try await model.countTokens(testPrompt)
-
-    XCTAssertEqual(response.totalTokens, 6)
-  }
-
-  func testCountTokens_requestOptions_defaultTimeout() async throws {
-    let expectedTimeout = 300.0
-    MockURLProtocol
-      .requestHandler = try httpRequestHandler(
-        forResource: "success-total-tokens",
-        withExtension: "json",
-        timeout: expectedTimeout
-      )
 
     let response = try await model.countTokens(testPrompt)
 
@@ -1114,8 +960,8 @@ final class GenerativeModelTests: XCTestCase {
   private func httpRequestHandler(forResource name: String,
                                   withExtension ext: String,
                                   statusCode: Int = 200,
-                                  timeout: TimeInterval = RequestOptions()
-                                    .timeout) throws -> ((URLRequest) throws -> (
+                                  timeout: TimeInterval = URLRequest
+                                    .defaultTimeoutInterval()) throws -> ((URLRequest) throws -> (
     URLResponse,
     AsyncLineSequence<URL.AsyncBytes>?
   )) {
