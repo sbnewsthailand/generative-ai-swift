@@ -26,7 +26,6 @@ public struct ModelContent: Codable, Equatable {
       case text
       case inlineData
       case functionCall
-      case functionResponse
     }
 
     enum InlineDataKeys: String, CodingKey {
@@ -42,9 +41,6 @@ public struct ModelContent: Codable, Equatable {
 
     /// A predicted function call returned from the model.
     case functionCall(FunctionCall)
-
-    /// A response to a function call.
-    case functionResponse(FunctionResponse)
 
     // MARK: Convenience Initializers
 
@@ -72,10 +68,9 @@ public struct ModelContent: Codable, Equatable {
         )
         try inlineDataContainer.encode(mimetype, forKey: .mimeType)
         try inlineDataContainer.encode(bytes, forKey: .bytes)
-      case let .functionCall(functionCall):
-        try container.encode(functionCall, forKey: .functionCall)
-      case let .functionResponse(functionResponse):
-        try container.encode(functionResponse, forKey: .functionResponse)
+      case .functionCall:
+        // TODO(andrewheard): Encode FunctionCalls when when encoding is implemented.
+        fatalError("FunctionCall encoding not implemented.")
       }
     }
 
