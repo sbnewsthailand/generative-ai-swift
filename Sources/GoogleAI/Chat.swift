@@ -74,10 +74,32 @@ public class Chat {
     // Make sure we inject the role into the content received.
     let toAdd = ModelContent(role: "model", parts: reply.parts)
 
+    var functionResponses = [FunctionResponse]()
+    for part in reply.parts {
+      if case let .functionCall(functionCall) = part {
+        try functionResponses.append(await model.executeFunction(functionCall: functionCall))
+      }
+    }
+
+    // Call the functions requested by the model, if any.
+    let functionResponseContent = try ModelContent(
+      role: "function",
+      functionResponses.map { functionResponse in
+        ModelContent.Part.functionResponse(functionResponse)
+      }
+    )
+
     // Append the request and successful result to history, then return the value.
     history.append(contentsOf: newContent)
     history.append(toAdd)
-    return result
+
+    // If no function calls requested, return the results.
+    if functionResponses.isEmpty {
+      return result
+    }
+
+    // Re-send the message with the function responses.
+    return try await sendMessage([functionResponseContent])
   }
 
   /// Sends a message using the existing history of this chat as context. If successful, the message
@@ -172,6 +194,10 @@ public class Chat {
 
         case .functionCall:
           // TODO(andrewheard): Add function call to the chat history when encoding is implemented.
+          fatalError("Function calling not yet implemented in chat.")
+
+        case .functionResponse:
+          // TODO(andrewheard): Add function response to chat history when encoding is implemented.
           fatalError("Function calling not yet implemented in chat.")
         }
       }

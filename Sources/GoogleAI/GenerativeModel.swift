@@ -21,6 +21,9 @@ public final class GenerativeModel {
   // The prefix for a model resource in the Gemini API.
   private static let modelResourcePrefix = "models/"
 
+  // The prefix for a tuned model resource in the Gemini API.
+  private static let tunedModelResourcePrefix = "tunedModels/"
+
   /// The resource name of the model in the backend; has the format "models/model-name".
   let modelResourceName: String
 
@@ -33,14 +36,7 @@ public final class GenerativeModel {
   /// The safety settings to be used for prompts.
   let safetySettings: [SafetySetting]?
 
-  /// A list of tools the model may use to generate the next response.
   let tools: [Tool]?
-
-  /// Tool configuration for any `Tool` specified in the request.
-  let toolConfig: ToolConfig?
-
-  /// Instructions that direct the model to behave a certain way.
-  let systemInstruction: ModelContent?
 
   /// Configuration parameters for sending requests to the backend.
   let requestOptions: RequestOptions
@@ -48,24 +44,17 @@ public final class GenerativeModel {
   /// Initializes a new remote model with the given parameters.
   ///
   /// - Parameters:
-  ///   - name: The name of the model to use, for example `"gemini-1.5-pro-latest"`; see
+  ///   - name: The name of the model to use, e.g., `"gemini-1.0-pro"`; see
   ///     [Gemini models](https://ai.google.dev/models/gemini) for a list of supported model names.
   ///   - apiKey: The API key for your project.
   ///   - generationConfig: The content generation parameters your model should use.
   ///   - safetySettings: A value describing what types of harmful content your model should allow.
-  ///   - tools: A list of ``Tool`` objects  that the model may use to generate the next response.
-  ///   - systemInstruction: Instructions that direct the model to behave a certain way; currently
-  ///     only text content is supported, for example
-  ///     `ModelContent(role: "system", parts: "You are a cat. Your name is Neko.")`.
-  ///   - toolConfig: Tool configuration for any `Tool` specified in the request.
   ///   - requestOptions Configuration parameters for sending requests to the backend.
   public convenience init(name: String,
                           apiKey: String,
                           generationConfig: GenerationConfig? = nil,
                           safetySettings: [SafetySetting]? = nil,
                           tools: [Tool]? = nil,
-                          toolConfig: ToolConfig? = nil,
-                          systemInstruction: ModelContent? = nil,
                           requestOptions: RequestOptions = RequestOptions()) {
     self.init(
       name: name,
@@ -73,45 +62,6 @@ public final class GenerativeModel {
       generationConfig: generationConfig,
       safetySettings: safetySettings,
       tools: tools,
-      toolConfig: toolConfig,
-      systemInstruction: systemInstruction,
-      requestOptions: requestOptions,
-      urlSession: .shared
-    )
-  }
-
-  /// Initializes a new remote model with the given parameters.
-  ///
-  /// - Parameters:
-  ///   - name: The name of the model to use, e.g., `"gemini-1.5-pro-latest"`; see
-  ///     [Gemini models](https://ai.google.dev/models/gemini) for a list of supported model names.
-  ///   - apiKey: The API key for your project.
-  ///   - generationConfig: The content generation parameters your model should use.
-  ///   - safetySettings: A value describing what types of harmful content your model should allow.
-  ///   - tools: A list of ``Tool`` objects  that the model may use to generate the next response.
-  ///   - systemInstruction: Instructions that direct the model to behave a certain way; currently
-  ///     only text content is supported, e.g., "You are a cat. Your name is Neko."
-  ///   - toolConfig: Tool configuration for any `Tool` specified in the request.
-  ///   - requestOptions Configuration parameters for sending requests to the backend.
-  public convenience init(name: String,
-                          apiKey: String,
-                          generationConfig: GenerationConfig? = nil,
-                          safetySettings: [SafetySetting]? = nil,
-                          tools: [Tool]? = nil,
-                          toolConfig: ToolConfig? = nil,
-                          systemInstruction: String...,
-                          requestOptions: RequestOptions = RequestOptions()) {
-    self.init(
-      name: name,
-      apiKey: apiKey,
-      generationConfig: generationConfig,
-      safetySettings: safetySettings,
-      tools: tools,
-      toolConfig: toolConfig,
-      systemInstruction: ModelContent(
-        role: "system",
-        parts: systemInstruction.map { ModelContent.Part.text($0) }
-      ),
       requestOptions: requestOptions,
       urlSession: .shared
     )
@@ -123,8 +73,6 @@ public final class GenerativeModel {
        generationConfig: GenerationConfig? = nil,
        safetySettings: [SafetySetting]? = nil,
        tools: [Tool]? = nil,
-       toolConfig: ToolConfig? = nil,
-       systemInstruction: ModelContent? = nil,
        requestOptions: RequestOptions = RequestOptions(),
        urlSession: URLSession) {
     modelResourceName = GenerativeModel.modelResourceName(name: name)
@@ -132,8 +80,6 @@ public final class GenerativeModel {
     self.generationConfig = generationConfig
     self.safetySettings = safetySettings
     self.tools = tools
-    self.toolConfig = toolConfig
-    self.systemInstruction = systemInstruction
     self.requestOptions = requestOptions
 
     Logging.default.info("""
@@ -154,7 +100,7 @@ public final class GenerativeModel {
   /// [zero-shot](https://developers.google.com/machine-learning/glossary/generative#zero-shot-prompting)
   /// or "direct" prompts. For
   /// [few-shot](https://developers.google.com/machine-learning/glossary/generative#few-shot-prompting)
-  /// prompts, see `generateContent(_ content: @autoclosure () throws -> [ModelContent])`.
+  /// prompts, see ``generateContent(_:)-58rm0``.
   ///
   /// - Parameter content: The input(s) given to the model as a prompt (see
   /// ``ThrowingPartsRepresentable``
@@ -175,18 +121,13 @@ public final class GenerativeModel {
     -> GenerateContentResponse {
     let response: GenerateContentResponse
     do {
-      let generateContentRequest = try GenerateContentRequest(
-        model: modelResourceName,
-        isModelEncoded: false,
-        contents: content(),
-        generationConfig: generationConfig,
-        safetySettings: safetySettings,
-        tools: tools,
-        toolConfig: toolConfig,
-        systemInstruction: systemInstruction,
-        isStreaming: false,
-        options: requestOptions
-      )
+      let generateContentRequest = try GenerateContentRequest(model: modelResourceName,
+                                                              contents: content(),
+                                                              generationConfig: generationConfig,
+                                                              safetySettings: safetySettings,
+                                                              tools: tools,
+                                                              isStreaming: false,
+                                                              options: requestOptions)
       response = try await generativeAIService.loadRequest(request: generateContentRequest)
     } catch {
       if let imageError = error as? ImageConversionError {
@@ -216,7 +157,7 @@ public final class GenerativeModel {
   /// [zero-shot](https://developers.google.com/machine-learning/glossary/generative#zero-shot-prompting)
   /// or "direct" prompts. For
   /// [few-shot](https://developers.google.com/machine-learning/glossary/generative#few-shot-prompting)
-  /// prompts, see `generateContent(_ content: @autoclosure () throws -> [ModelContent])`.
+  /// prompts, see ``generateContent(_:)-58rm0``.
   ///
   /// - Parameter content: The input(s) given to the model as a prompt (see
   /// ``ThrowingPartsRepresentable``
@@ -252,18 +193,13 @@ public final class GenerativeModel {
       }
     }
 
-    let generateContentRequest = GenerateContentRequest(
-      model: modelResourceName,
-      isModelEncoded: false,
-      contents: evaluatedContent,
-      generationConfig: generationConfig,
-      safetySettings: safetySettings,
-      tools: tools,
-      toolConfig: toolConfig,
-      systemInstruction: systemInstruction,
-      isStreaming: true,
-      options: requestOptions
-    )
+    let generateContentRequest = GenerateContentRequest(model: modelResourceName,
+                                                        contents: evaluatedContent,
+                                                        generationConfig: generationConfig,
+                                                        safetySettings: safetySettings,
+                                                        tools: tools,
+                                                        isStreaming: true,
+                                                        options: requestOptions)
 
     var responseIterator = generativeAIService.loadRequestStream(request: generateContentRequest)
       .makeAsyncIterator()
@@ -308,7 +244,7 @@ public final class GenerativeModel {
   /// [zero-shot](https://developers.google.com/machine-learning/glossary/generative#zero-shot-prompting)
   /// or "direct" prompts. For
   /// [few-shot](https://developers.google.com/machine-learning/glossary/generative#few-shot-prompting)
-  /// input, see `countTokens(_ content: @autoclosure () throws -> [ModelContent])`.
+  /// input, see ``countTokens(_:)-9spwl``.
   ///
   /// - Parameter content: The input(s) given to the model as a prompt (see
   /// ``ThrowingPartsRepresentable``
@@ -331,25 +267,39 @@ public final class GenerativeModel {
   public func countTokens(_ content: @autoclosure () throws -> [ModelContent]) async throws
     -> CountTokensResponse {
     do {
-      let generateContentRequest = try GenerateContentRequest(model: modelResourceName,
-                                                              isModelEncoded: true,
-                                                              contents: content(),
-                                                              generationConfig: generationConfig,
-                                                              safetySettings: safetySettings,
-                                                              tools: tools,
-                                                              toolConfig: toolConfig,
-                                                              systemInstruction: systemInstruction,
-                                                              isStreaming: false,
-                                                              options: requestOptions)
-      let countTokensRequest = CountTokensRequest(
+      let countTokensRequest = try CountTokensRequest(
         model: modelResourceName,
-        generateContentRequest: generateContentRequest,
+        contents: content(),
         options: requestOptions
       )
       return try await generativeAIService.loadRequest(request: countTokensRequest)
     } catch {
       throw CountTokensError.internalError(underlying: error)
     }
+  }
+
+  func executeFunction(functionCall: FunctionCall) async throws -> FunctionResponse {
+    guard let tools = tools else {
+      throw GenerateContentError.internalError(underlying: FunctionCallError())
+    }
+    guard let tool = tools.first(where: { tool in
+      tool.functionDeclarations != nil
+    }) else {
+      throw GenerateContentError.internalError(underlying: FunctionCallError())
+    }
+    guard let functionDeclaration = tool.functionDeclarations?.first(where: { functionDeclaration in
+      functionDeclaration.name == functionCall.name
+    }) else {
+      throw GenerateContentError.internalError(underlying: FunctionCallError())
+    }
+    guard let function = functionDeclaration.function else {
+      throw GenerateContentError.internalError(underlying: FunctionCallError())
+    }
+
+    return try FunctionResponse(
+      name: functionCall.name,
+      response: await function(functionCall.args)
+    )
   }
 
   /// Returns a model resource name of the form "models/model-name" based on `name`.
@@ -368,7 +318,7 @@ public final class GenerativeModel {
     if let error = error as? GenerateContentError {
       return error
     } else if let error = error as? RPCError, error.isInvalidAPIKeyError() {
-      return GenerateContentError.invalidAPIKey(message: error.message)
+      return GenerateContentError.invalidAPIKey
     } else if let error = error as? RPCError, error.isUnsupportedUserLocationError() {
       return GenerateContentError.unsupportedUserLocation
     }
@@ -376,8 +326,10 @@ public final class GenerativeModel {
   }
 }
 
-/// An error thrown in `GenerativeModel.countTokens(_:)`.
+/// See ``GenerativeModel/countTokens(_:)-9spwl``.
 @available(iOS 15.0, macOS 11.0, macCatalyst 15.0, *)
 public enum CountTokensError: Error {
   case internalError(underlying: Error)
 }
+
+struct FunctionCallError: Error {}
