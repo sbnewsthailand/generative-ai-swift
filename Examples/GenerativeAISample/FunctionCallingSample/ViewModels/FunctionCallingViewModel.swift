@@ -39,7 +39,7 @@ class FunctionCallingViewModel: ObservableObject {
 
   init() {
     model = GenerativeModel(
-      name: "gemini-1.5-flash-latest",
+      name: "gemini-1.0-pro",
       apiKey: APIKey.default,
       tools: [Tool(functionDeclarations: [
         FunctionDeclaration(
@@ -61,7 +61,8 @@ class FunctionCallingViewModel: ObservableObject {
           ],
           requiredParameters: ["currency_from", "currency_to"]
         ),
-      ])]
+      ])],
+      requestOptions: RequestOptions(apiVersion: "v1beta")
     )
     chat = model.startChat()
   }
@@ -157,7 +158,7 @@ class FunctionCallingViewModel: ObservableObject {
       case let .functionCall(functionCall):
         messages.insert(functionCall.chatMessage(), at: messages.count - 1)
         functionCalls.append(functionCall)
-      case .data, .fileData, .functionResponse:
+      case .data, .functionResponse:
         fatalError("Unsupported response content.")
       }
     }
