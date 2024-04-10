@@ -28,43 +28,22 @@ final class GoogleGenerativeAITests: XCTestCase {
                                   topK: 16,
                                   candidateCount: 4,
                                   maxOutputTokens: 256,
-                                  stopSequences: ["..."],
-                                  responseMIMEType: "text/plain")
+                                  stopSequences: ["..."])
     let filters = [SafetySetting(harmCategory: .dangerousContent, threshold: .blockOnlyHigh)]
     let systemInstruction = ModelContent(role: "system", parts: [.text("Talk like a pirate.")])
 
     // Permutations without optional arguments.
-    let _ = GenerativeModel(name: "gemini-1.5-pro-latest", apiKey: "API_KEY")
+    let _ = GenerativeModel(name: "gemini-1.0-pro", apiKey: "API_KEY")
+    let _ = GenerativeModel(name: "gemini-1.0-pro", apiKey: "API_KEY", safetySettings: filters)
+    let _ = GenerativeModel(name: "gemini-1.0-pro", apiKey: "API_KEY", generationConfig: config)
     let _ = GenerativeModel(
-      name: "gemini-1.5-pro-latest",
-      apiKey: "API_KEY",
-      safetySettings: filters
-    )
-    let _ = GenerativeModel(
-      name: "gemini-1.5-pro-latest",
-      apiKey: "API_KEY",
-      generationConfig: config
-    )
-    let _ = GenerativeModel(
-      name: "gemini-1.5-pro-latest",
+      name: "gemini-1.0-pro",
       apiKey: "API_KEY",
       systemInstruction: systemInstruction
     )
 
-    let _ = GenerativeModel(
-      name: "gemini-1.5-pro-latest",
-      apiKey: "API_KEY",
-      systemInstruction: "Talk like a pirate."
-    )
-
-    let _ = GenerativeModel(
-      name: "gemini-1.5-pro-latest",
-      apiKey: "API_KEY",
-      systemInstruction: "Talk like a pirate.", "Your name is Francis Drake."
-    )
-
     // All arguments passed.
-    let genAI = GenerativeModel(name: "gemini-1.5-pro-latest",
+    let genAI = GenerativeModel(name: "gemini-1.0-pro",
                                 apiKey: "API_KEY",
                                 generationConfig: config, // Optional
                                 safetySettings: filters, // Optional
@@ -91,13 +70,6 @@ final class GoogleGenerativeAITests: XCTestCase {
     let _ = try await genAI.generateContent(str)
     let _ = try await genAI.generateContent([str])
     let _ = try await genAI.generateContent(str, "abc", "def")
-    let _ = try await genAI.generateContent(
-      str,
-      ModelContent.Part.fileData(
-        mimetype: "image/jpeg",
-        uri: "https://generativelanguage.googleapis.com/v1beta/files/rand0mha5sh"
-      )
-    )
     #if canImport(UIKit)
       _ = try await genAI.generateContent(UIImage())
       _ = try await genAI.generateContent([UIImage()])
@@ -175,18 +147,6 @@ final class GoogleGenerativeAITests: XCTestCase {
     // Chat
     _ = genAI.startChat()
     _ = genAI.startChat(history: [ModelContent(parts: "abc")])
-  }
-
-  // Public API tests for GenerateContentResponse.
-  func generateContentResponseAPI() {
-    let response = GenerateContentResponse(candidates: [])
-
-    let _: [CandidateResponse] = response.candidates
-    let _: PromptFeedback? = response.promptFeedback
-
-    // Computed Properties
-    let _: String? = response.text
-    let _: [FunctionCall] = response.functionCalls
   }
 
   // Result builder alternative
