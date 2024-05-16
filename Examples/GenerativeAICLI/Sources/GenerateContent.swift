@@ -55,34 +55,7 @@ struct GenerateContent: AsyncParsableCommand {
 
   mutating func run() async throws {
     do {
-      let safetySettings = [SafetySetting(harmCategory: .dangerousContent, threshold: .blockNone)]
-      // Let the server pick the default config.
-      let config = GenerationConfig(
-        temperature: 0.2,
-        topP: 0.1,
-        topK: 16,
-        candidateCount: 1,
-        maxOutputTokens: isStreaming ? nil : 256,
-        stopSequences: nil
-      )
-
-      let model = GenerativeModel(
-        name: modelNameOrDefault(),
-        apiKey: apiKey,
-        generationConfig: config,
-        safetySettings: safetySettings,
-        tools: [Tool(functionDeclarations: [
-          FunctionDeclaration(
-            name: "get_exchange_rate",
-            description: "Get the exchange rate for currencies between countries",
-            parameters: getExchangeRateSchema(),
-            function: getExchangeRateWrapper
-          ),
-        ])],
-        requestOptions: RequestOptions(apiVersion: "v1beta")
-      )
-
-      let chat = model.startChat()
+      let model = GenerativeModel(name: modelNameOrDefault(), apiKey: apiKey)
 
       var parts = [ModelContent.Part]()
 
@@ -107,7 +80,7 @@ struct GenerateContent: AsyncParsableCommand {
       let input = [ModelContent(parts: parts)]
 
       if isStreaming {
-        let contentStream = chat.sendMessageStream(input)
+        let contentStream = model.generateContentStream(input)
         print("Generated Content <streaming>:")
         for try await content in contentStream {
           if let text = content.text {
@@ -115,8 +88,7 @@ struct GenerateContent: AsyncParsableCommand {
           }
         }
       } else {
-        // Unary generate content
-        let content = try await chat.sendMessage(input)
+        let content = try await model.generateContent(input)
         if let text = content.text {
           print("Generated Content:\n\(text)")
         }
@@ -127,83 +99,11 @@ struct GenerateContent: AsyncParsableCommand {
   }
 
   func modelNameOrDefault() -> String {
-    if let modelName = modelName {
+    if let modelName {
       return modelName
-    } else if imageURL != nil {
-      return "gemini-1.0-pro-vision-latest"
     } else {
-      return "gemini-1.0-pro"
+      return "gemini-1.5-flash-latest"
     }
-  }
-
-  // MARK: - Callable Functions
-
-  // Returns exchange rates from the Frankfurter API
-  // This is an example function that a developer might provide.
-  func getExchangeRate(amount: Double, date: String, from: String,
-                       to: String) async throws -> String {
-    var urlComponents = URLComponents(string: "https://api.frankfurter.app")!
-    urlComponents.path = "/\(date)"
-    urlComponents.queryItems = [
-      .init(name: "amount", value: String(amount)),
-      .init(name: "from", value: from),
-      .init(name: "to", value: to),
-    ]
-
-    let (data, _) = try await URLSession.shared.data(from: urlComponents.url!)
-    return String(data: data, encoding: .utf8)!
-  }
-
-  // This is a wrapper for the `getExchangeRate` function.
-  func getExchangeRateWrapper(args: JSONObject) async throws -> JSONObject {
-    // 1. Validate and extract the parameters provided by the model (from a `FunctionCall`)
-    guard case let .string(date) = args["currency_date"] else {
-      fatalError()
-    }
-    guard case let .string(from) = args["currency_from"] else {
-      fatalError()
-    }
-    guard case let .string(to) = args["currency_to"] else {
-      fatalError()
-    }
-    guard case let .number(amount) = args["amount"] else {
-      fatalError()
-    }
-
-    // 2. Call the wrapped function
-    let response = try await getExchangeRate(amount: amount, date: date, from: from, to: to)
-
-    // 3. Return the exchange rates as a JSON object (returned to the model in a `FunctionResponse`)
-    return ["content": .string(response)]
-  }
-
-  // Returns the schema of the `getExchangeRate` function
-  func getExchangeRateSchema() -> Schema {
-    return Schema(
-      type: .object,
-      properties: [
-        "currency_date": Schema(
-          type: .string,
-          description: """
-          A date that must always be in YYYY-MM-DD format or the value 'latest' if a time period
-          is not specified
-          """
-        ),
-        "currency_from": Schema(
-          type: .string,
-          description: "The currency to convert from in ISO 4217 format"
-        ),
-        "currency_to": Schema(
-          type: .string,
-          description: "The currency to convert to in ISO 4217 format"
-        ),
-        "amount": Schema(
-          type: .number,
-          description: "The amount of currency to convert as a double value"
-        ),
-      ],
-      required: ["currency_date", "currency_from", "currency_to", "amount"]
-    )
   }
 }
 
